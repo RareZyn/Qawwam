@@ -64,7 +64,9 @@ export default function Books() {
   const pct = current?.total_pages ? Math.round((current.current_page / current.total_pages) * 100) : 0;
 
   const byDay: Record<string, number> = {};
-  for (const l of logs ?? []) byDay[l.log_date] = (byDay[l.log_date] ?? 0) + l.pages_read;
+  // Only count logs of books that still exist, so deleting a book also clears its pages from the chart.
+  const bookIds = new Set((books ?? []).map((b) => b.id));
+  for (const l of logs ?? []) if (bookIds.has(l.book_id)) byDay[l.log_date] = (byDay[l.log_date] ?? 0) + l.pages_read;
   const days = Array.from({ length: 14 }, (_, i) => addDays(today, i - 13));
   const max = Math.max(1, ...days.map((d) => byDay[d] ?? 0));
   const total = days.reduce((a, d) => a + Math.max(0, byDay[d] ?? 0), 0);

@@ -221,15 +221,7 @@ function bookDocs(today: string, now: number): SeedDoc[] {
       started_at: addDays(today, -24 - i * 30), finished_at: status === 'finished' ? addDays(today, -30 * i) : null, created_ms: now + i, sample: true,
     },
   }));
-  // Pages read on each of the last 14 days (oldest first); they add up to page 142.
-  const pages = [6, 0, 8, 6, 4, 8, 0, 18, 0, 24, 12, 30, 8, 10];
-  let page = 142 - pages.reduce((a, b) => a + b, 0);
-  pages.forEach((n, i) => {
-    page += n;
-    if (!n) return;
-    const date = addDays(today, i - 13);
-    out.push({ col: 'reading_logs', id: `b_atomic_${date}`, data: { book_id: 'b_atomic', log_date: date, page, pages_read: n, sample: true } });
-  });
+  // No example reading history: "Pages read" starts at 0 for every new account.
   return out;
 }
 
