@@ -1,0 +1,36 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // A good habit must add points and a bad habit must remove them.
+    function validHabit(d) {
+      return d.type in ['good', 'bad']
+        && d.points is int
+        && ((d.type == 'good' && d.points > 0) || (d.type == 'bad' && d.points < 0));
+    }
+
+    // Money is stored in whole sen, never as a decimal.
+    function validFor(coll, d) {
+      return (coll != 'habits' || validHabit(d))
+        && (coll != 'wallets' || d.balance is int)
+        && (coll != 'transactions' || d.amount is int)
+        && (coll != 'money_items' || d.amount is int);
+    }
+
+    // The user's profile document.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // Everything a user owns lives one level under their profile.
+    match /users/{uid}/{coll}/{docId} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && validFor(coll, request.resource.data);
+    }
+  }
+}

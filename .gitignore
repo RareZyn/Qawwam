@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dev-dist/
+test-results/
+playwright-report/
+*.log
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+logo/
+database.md
+Qawwam.docx
+requirements.md
