@@ -297,7 +297,6 @@ function SpentBody({ onEdit }: { onEdit: (g: GroupCode, i?: MoneyItem) => void }
   const totalSpent = sum(list, (i) => spent[i.id] ?? 0);
   const over = list.filter((i) => (spent[i.id] ?? 0) > i.amount);
   const loose = unsorted(txns ?? []).filter((t) => t.wallet_id === cash?.id && cycleMonth(t.txn_date, startDay) === month);
-  const left = budget - totalSpent;
 
   return (
     <section className="col" aria-label="Spent and cash">
@@ -310,15 +309,6 @@ function SpentBody({ onEdit }: { onEdit: (g: GroupCode, i?: MoneyItem) => void }
           <span>Budget {fmtRM(budget)}</span>
         </div>
       </div>
-      {cash && budget - totalSpent > cash.balance && (
-        <div className="alert" role="alert">
-          <span className="badge red">!</span>
-          <span>
-            Budgets still to spend ({fmtRM(left)}) are more than the cash in hand ({fmtRM(cash.balance)}). Tick an item's box to move its budget in, or fix the balance on the Money
-            page.
-          </span>
-        </div>
-      )}
       {over.map((i) => (
         <div key={i.id} className="alert" role="alert">
           <span className="badge red">!</span>

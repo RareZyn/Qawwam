@@ -173,11 +173,11 @@ export default function Settings({ user }: { user: User }) {
           <label className="line row between small">
             <span className="col tight">
               Money month starts on
-              <span className="tiny dim">Your payday. Checklist ticks and cash budgets reset on this day.</span>
+              <span className="tiny dim">Your payday. Checklist ticks and cash spending reset on this day. 1st means the calendar month.</span>
             </span>
             <select
               className="input sm"
-              style={{ width: 'auto' }}
+              style={{ width: 'auto', minWidth: 84, flexShrink: 0 }}
               value={settings?.money_cycle_day ?? 1}
               onChange={(e) => {
                 const d = Number(e.target.value);
@@ -186,7 +186,7 @@ export default function Settings({ user }: { user: User }) {
             >
               {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
                 <option key={d} value={d}>
-                  {d === 1 ? '1st (calendar month)' : ordinal(d)}
+                  {ordinal(d)}
                 </option>
               ))}
             </select>
