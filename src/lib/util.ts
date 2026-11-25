@@ -27,6 +27,18 @@ export const daysInMonth = (m: string) => {
   return new Date(y, mo, 0).getDate();
 };
 
+/**
+ * Money month (pay cycle) that contains s. With a start day of 25, 25 Nov – 24 Dec is the December cycle,
+ * so ticks reset on payday. A start day of 1 is the plain calendar month.
+ */
+export const cycleMonth = (s: string, startDay = 1) =>
+  startDay > 1 && Number(s.slice(8, 10)) >= startDay ? addMonths(monthKey(s), 1) : monthKey(s);
+/** First and last day of a money month. */
+export const cycleRange = (m: string, startDay = 1) =>
+  startDay > 1
+    ? { start: `${addMonths(m, -1)}-${pad(startDay)}`, end: addDays(`${m}-${pad(startDay)}`, -1) }
+    : { start: `${m}-01`, end: `${m}-${pad(daysInMonth(m))}` };
+
 /** Monday of the week that contains s. */
 export const weekStart = (s: string) => {
   const d = parseYmd(s);

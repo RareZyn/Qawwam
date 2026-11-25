@@ -415,7 +415,7 @@ function EntryForm({ formId, entry, secret, cats, onDone }: { formId: string; en
       </Field>
       <div className="two">
         <Field label="Username">
-          <input className="input" value={username} autoComplete="off" onChange={(e) => setUsername(e.target.value)} />
+          <input className="input" value={username} autoComplete="username"onChange={(e) => setUsername(e.target.value)} />
         </Field>
         <Field label="Category">
           <select
@@ -441,7 +441,7 @@ function EntryForm({ formId, entry, secret, cats, onDone }: { formId: string; en
           <input
             className="input num grow"
             type={show ? 'text' : 'password'}
-            autoComplete="new-password"
+            autoComplete="current-password"
             aria-label="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

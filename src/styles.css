@@ -214,6 +214,8 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; }
 .heat button.l2 { background: #4f86a6; }
 .heat button.l3 { background: var(--blue); }
 .heat button.neg { background: #8a1420; }
+.heat button.r1 { background: #5a1a20; }
+.heat button.r2 { background: #b3202d; }
 .heat button.future { background: transparent; }
 .heat button.sel { outline: 2px solid var(--text); outline-offset: 1px; }
 .heat-scroll { overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; }

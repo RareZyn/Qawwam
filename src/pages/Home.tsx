@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom';
 import { setPage } from '../lib/actions';
 import { useBooks, useHabits, useItems, useLogs, useNotifs, usePayments, useSettings, useTodos, useTxns, useWallets } from '../lib/db';
 import { dueToday } from '../lib/habits';
-import { isPaid, spentByItem } from '../lib/money';
-import { byId, daysInMonth, diffDays, fmtDayLong, fmtRM, monthKey, ordinal, sum } from '../lib/util';
+import { cycleDay, isPaid, spentByItem } from '../lib/money';
+import { byId, cycleMonth, cycleRange, daysInMonth, diffDays, fmtDayLong, fmtRM, monthKey, ordinal, pad, sum } from '../lib/util';
 import { useQuickSpend } from '../quick';
 import { Bar, Icon, run, useToday } from '../ui';
 import { HabitRow, StreakCard } from './habitParts';
@@ -70,7 +70,6 @@ function BookWidget() {
 
 export default function Home({ user }: { user: User }) {
   const today = useToday();
-  const month = monthKey(today);
   const habits = useHabits();
   const logList = useLogs();
   const wallets = useWallets();
@@ -93,16 +92,21 @@ export default function Home({ user }: { user: User }) {
   const cash = wallets?.find((w) => w.id === settings?.cash_wallet_id) ?? wallets?.find((w) => w.is_cash_pool);
   const spentItems = (items ?? []).filter((i) => i.group_id === 'spent_cash' && i.status === 'active');
   const budget = sum(spentItems, (i) => i.amount);
-  const spent = sum(Object.values(spentByItem(txns ?? [], month)), (x) => x);
+  const cycle = cycleMonth(today, cycleDay(settings));
+  const spent = sum(Object.values(spentByItem(txns ?? [], cycle, cycleDay(settings))), (x) => x);
 
   const open = (todos ?? []).filter((t) => t.status === 'open');
   const urgent = open.filter((t) => t.is_urgent).length;
   const overdue = open.filter((t) => t.due_date && t.due_date < today).length;
 
   const savings = (items ?? []).filter((i) => i.group_id === 'savings_investment' && i.status === 'active');
-  const savingsPaid = savings.filter((i) => isPaid(payments, i.id, month)).length;
-  const day = Math.min(settings?.savings_reminder_day ?? 25, daysInMonth(month));
-  const daysLeft = diffDays(today, `${month}-${String(day).padStart(2, '0')}`);
+  const savingsPaid = savings.filter((i) => isPaid(payments, i.id, cycle)).length;
+  // The savings day that falls inside the current money month.
+  const range = cycleRange(cycle, cycleDay(settings));
+  const dueIn = (m: string) => `${m}-${pad(Math.min(settings?.savings_reminder_day ?? 25, daysInMonth(m)))}`;
+  const dueDate = dueIn(monthKey(range.start)) >= range.start ? dueIn(monthKey(range.start)) : dueIn(monthKey(range.end));
+  const day = Number(dueDate.slice(8));
+  const daysLeft = diffDays(today, dueDate);
 
   return (
     <div className="page">

@@ -4,10 +4,10 @@ import { BrowserRouter, Link, NavLink, Navigate, Outlet, Route, Routes, useLocat
 import { dueReminders, fireReminder, primeReminder } from './lib/actions';
 import { resetStore, setUid, uid, useItems, useLogs, usePayments, useReminders, useSettings, useTodos } from './lib/db';
 import { logId } from './lib/habits';
-import { paymentId } from './lib/money';
+import { cycleDay, paymentId } from './lib/money';
 import { ensureSeed } from './lib/seed';
 import type { Reminder } from './lib/types';
-import { byId, monthKey, todayStr } from './lib/util';
+import { byId, cycleMonth, todayStr } from './lib/util';
 import { setVk, useVk } from './lib/vaultState';
 import Home from './pages/Home';
 import QuickSpendForm from './pages/QuickSpend';
@@ -139,7 +139,7 @@ function ReminderRunner() {
       if (!s.reminders || !s.settings || !s.logs || !s.payments || !s.todos || !s.items) return;
       const now = Date.now();
       const today = todayStr();
-      const month = monthKey(today);
+      const month = cycleMonth(today, cycleDay(s.settings));
       const logMap = byId(s.logs);
       const payMap = byId(s.payments);
       const todoMap = byId(s.todos);

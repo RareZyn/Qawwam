@@ -2,10 +2,10 @@ import { getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { rebuildSummaries } from '../lib/actions';
-import { ucol, useHabits, useLogs, useSummaries } from '../lib/db';
+import { ucol, useHabitLogs, useHabits, useLogs, useSummaries } from '../lib/db';
 import { cleanDays, cleanStreak, goodStreak, periods } from '../lib/habits';
 import type { Habit, HabitLog, Summary } from '../lib/types';
-import { addDays, addMonths, byId, fmtDay, fmtDayLong, fmtMonth, fmtPoints, monthKey, weekStart } from '../lib/util';
+import { addDays, addMonths, byId, dow, fmtDay, fmtDayLong, fmtMonth, fmtPoints, monthKey, weekStart } from '../lib/util';
 import { Bar, Icon, Seg, run, useIsDesktop, useToday } from '../ui';
 
 type Period = 'day' | 'week' | 'month';
@@ -17,6 +17,143 @@ function level(score: number | undefined) {
   if (score < 8) return 'l1';
   if (score < 16) return 'l2';
   return 'l3';
+}
+
+/** Times done in a day: once is a solid mark, twice or more the strongest. */
+function countLevel(count: number | undefined, bad: boolean) {
+  if (!count) return '';
+  if (bad) return count > 1 ? 'r2' : 'r1';
+  return count > 1 ? 'l3' : 'l2';
+}
+
+/** Whole weeks, Sunday at the top, ending with the current week. */
+function heatCells(today: string, weeks: number) {
+  const end = addDays(today, 6 - dow(today));
+  const start = addDays(end, -(weeks * 7) + 1);
+  const cells = Array.from({ length: weeks * 7 }, (_, i) => addDays(start, i));
+  const months = Array.from({ length: weeks }, (_, w) => {
+    const d = cells[w * 7];
+    return d.slice(8) <= '07' ? fmtMonth(monthKey(d)).slice(0, 3) : '';
+  });
+  return { cells, months };
+}
+
+function HeatGrid({
+  cells,
+  months,
+  today,
+  picked,
+  onPick,
+  cls,
+  label,
+  title,
+}: {
+  cells: string[];
+  months: string[];
+  today: string;
+  picked: string;
+  onPick: (d: string) => void;
+  cls: (d: string) => string;
+  label: (d: string) => string;
+  title: string;
+}) {
+  return (
+    <div className="heat-scroll">
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${months.length}, 13px)`, columnGap: 3, fontSize: 10, color: 'var(--dim)', height: 14, marginBottom: 4 }}>
+        {months.map((m, i) => (
+          <span key={i} style={{ whiteSpace: 'nowrap' }}>
+            {m}
+          </span>
+        ))}
+      </div>
+      <div className="heat" role="grid" aria-label={title}>
+        {cells.map((d) => {
+          const future = d > today;
+          return (
+            <button
+              key={d}
+              type="button"
+              disabled={future}
+              className={`${future ? 'future' : cls(d)}${d === picked ? ' sel' : ''}`}
+              aria-label={`${fmtDayLong(d)}: ${label(d)}`}
+              title={`${fmtDay(d)}: ${label(d)}`}
+              onClick={() => onPick(d)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** One habit's year: how many times it was done each day. */
+function HabitYear({ habits, habitId, onHabit, weeks }: { habits: Habit[]; habitId: string; onHabit: (id: string) => void; weeks: number }) {
+  const today = useToday();
+  const logList = useHabitLogs(habitId);
+  const habit = habits.find((h) => h.id === habitId);
+  const bad = habit?.type === 'bad';
+  const { cells, months } = heatCells(today, weeks);
+  const [picked, setPicked] = useState(today);
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const l of logList ?? []) if (l.count > 0) out[l.log_date] = (out[l.log_date] ?? 0) + l.count;
+    return out;
+  }, [logList]);
+  const inRange = cells.filter((d) => d <= today);
+  const times = inRange.reduce((a, d) => a + (counts[d] ?? 0), 0);
+  const days = inRange.filter((d) => counts[d]).length;
+  const month = monthKey(today);
+  const thisMonth = inRange.filter((d) => monthKey(d) === month).reduce((a, d) => a + (counts[d] ?? 0), 0);
+  const timesLabel = (n: number) => `${n} ${n === 1 ? 'time' : 'times'}`;
+
+  return (
+    <section className="card" id="habit-year">
+      <div className="row between base wrap">
+        <h2>Per habit · last {weeks === 52 ? '12 months' : `${weeks} weeks`}</h2>
+        <select className="input sm" style={{ width: 'auto', maxWidth: 220 }} aria-label="Habit" value={habitId} onChange={(e) => onHabit(e.target.value)}>
+          {habits.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+              {h.status !== 'active' ? ` (${h.status})` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="row small muted" style={{ gap: 16, flexWrap: 'wrap' }}>
+        <span>
+          <strong className={`mono ${bad ? 'red' : 'blue'}`}>{logList ? times : '…'}</strong> {bad ? 'times it happened' : 'times done'}
+        </span>
+        <span>
+          <strong className="mono">{logList ? days : '…'}</strong> {days === 1 ? 'day' : 'days'}
+        </span>
+        <span>
+          <strong className="mono">{logList ? thisMonth : '…'}</strong> in {fmtMonth(month)}
+        </span>
+      </div>
+      <HeatGrid
+        cells={cells}
+        months={months}
+        today={today}
+        picked={picked}
+        onPick={setPicked}
+        cls={(d) => countLevel(counts[d], bad)}
+        label={(d) => (counts[d] ? timesLabel(counts[d]) : 'not logged')}
+        title={`${habit?.name ?? 'Habit'} heatmap`}
+      />
+      <div className="row between wrap">
+        <span className="tiny dim">
+          {fmtDayLong(picked)} · {counts[picked] ? timesLabel(counts[picked]) : 'not logged'}
+        </span>
+        <div className="legend">
+          <span>Less</span>
+          <i style={{ background: '#1f1916' }} />
+          <i style={{ background: bad ? '#5a1a20' : '#4f86a6' }} />
+          <i style={{ background: bad ? '#b3202d' : 'var(--blue)' }} />
+          <span>More</span>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 /** Logs for one day. Recent days come from the live list; older ones are fetched when picked. */
@@ -48,6 +185,7 @@ export default function HabitDash() {
   const [period, setPeriod] = useState<Period>('week');
   const [picked, setPicked] = useState(today);
   const dayLogs = useDayLogs(picked, logList);
+  const [chosenHabit, setHabitId] = useState<string | null>(null);
 
   // Score for the current and the previous period of the chosen kind.
   const card = useMemo(() => {
@@ -62,15 +200,8 @@ export default function HabitDash() {
     return { label, score: s?.score ?? 0, trend: `${fmtPoints(diff)} vs ${vs}`, good: s?.good_count ?? 0, bad: s?.bad_count ?? 0 };
   }, [period, today, sums]);
 
-  // Heatmap: whole weeks, Sunday at the top, ending with the current week.
   const weeks = desktop ? 52 : 20;
-  const end = addDays(today, 6 - new Date().getDay());
-  const startDay = addDays(end, -(weeks * 7) + 1);
-  const cells = Array.from({ length: weeks * 7 }, (_, i) => addDays(startDay, i));
-  const months = Array.from({ length: weeks }, (_, w) => {
-    const d = cells[w * 7];
-    return d.slice(8) <= '07' ? fmtMonth(monthKey(d)).slice(0, 3) : '';
-  });
+  const { cells, months } = heatCells(today, weeks);
   const logged = cells.filter((d) => sums[`day_${d}`]).length;
   const best = Math.max(0, ...cells.map((d) => sums[`day_${d}`]?.score ?? 0));
 
@@ -86,6 +217,9 @@ export default function HabitDash() {
       return { h, cur, best: showBest ? best : Math.max(cur, 7), label };
     })
     .sort((a, b) => b.cur - a.cur);
+  // Active habits first, then paused and archived ones so their history can still be seen.
+  const yearHabits = [...(habits ?? [])].sort((a, b) => Number(a.status !== 'active') - Number(b.status !== 'active') || a.sort_order - b.sort_order);
+  const habitId = chosenHabit ?? yearHabits[0]?.id;
 
   return (
     <div className="page">
@@ -126,32 +260,16 @@ export default function HabitDash() {
             {logged} days logged · best day {fmtPoints(best)}
           </span>
         </div>
-        <div className="heat-scroll">
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weeks}, 13px)`, columnGap: 3, fontSize: 10, color: 'var(--dim)', height: 14, marginBottom: 4 }}>
-            {months.map((m, i) => (
-              <span key={i} style={{ whiteSpace: 'nowrap' }}>
-                {m}
-              </span>
-            ))}
-          </div>
-          <div className="heat" role="grid" aria-label="Daily habit score heatmap">
-            {cells.map((d) => {
-              const s = sums[`day_${d}`];
-              const future = d > today;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  disabled={future}
-                  className={`${future ? 'future' : level(s?.score)}${d === picked ? ' sel' : ''}`}
-                  aria-label={`${fmtDayLong(d)}: ${s ? fmtPoints(s.score) : 'nothing logged'}`}
-                  title={`${fmtDay(d)}: ${s ? fmtPoints(s.score) : '0'}`}
-                  onClick={() => setPicked(d)}
-                />
-              );
-            })}
-          </div>
-        </div>
+        <HeatGrid
+          cells={cells}
+          months={months}
+          today={today}
+          picked={picked}
+          onPick={setPicked}
+          cls={(d) => level(sums[`day_${d}`]?.score)}
+          label={(d) => (sums[`day_${d}`] ? fmtPoints(sums[`day_${d}`].score) : 'nothing logged')}
+          title="Daily habit score heatmap"
+        />
         <div className="legend">
           <span>Negative</span>
           <i style={{ background: '#8a1420' }} />
@@ -193,19 +311,31 @@ export default function HabitDash() {
         <section className="card">
           <h2>Streaks</h2>
           {streakRows.map(({ h, cur, best, label }) => (
-            <div key={h.id} className="col tight" style={{ padding: '10px 0', borderTop: '1px solid var(--soft)' }}>
+            <button
+              key={h.id}
+              type="button"
+              className="col tight"
+              style={{ padding: '10px 0', border: 0, borderTop: '1px solid var(--soft)', background: 'none', color: 'inherit', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}
+              aria-label={`${h.name}: ${label}. Show its year`}
+              onClick={() => {
+                setHabitId(h.id);
+                document.getElementById('habit-year')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
               <div className="row between base small">
                 <span>{h.name}</span>
                 <span className="mono tiny muted nowrap">{label}</span>
               </div>
               <Bar pct={best ? (cur / best) * 100 : 0} red={h.type === 'bad'} />
-            </div>
+            </button>
           ))}
           <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => run(rebuildSummaries(), 'Recalculating scores from your logs…')}>
             Recalculate scores
           </button>
         </section>
       </div>
+
+      {habitId && <HabitYear habits={yearHabits} habitId={habitId} onHabit={setHabitId} weeks={weeks} />}
     </div>
   );
 }

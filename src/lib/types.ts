@@ -233,6 +233,8 @@ export interface Settings {
   /** sen */
   monthly_income: number;
   savings_reminder_day: number;
+  /** Day the money month starts (payday), 1..28. Missing means 1, the calendar month. */
+  money_cycle_day?: number;
   lock_timeout_seconds: number;
   notifications_enabled: Record<string, boolean>;
   vault_kdf_salt: string | null;

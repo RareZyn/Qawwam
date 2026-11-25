@@ -1,9 +1,9 @@
 import { type FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useItems, useTxns, useWallets } from '../lib/db';
-import { GROUPS, categoriseTxn, editTxn, removeTxn, unsorted } from '../lib/money';
+import { useItems, useSettings, useTxns, useWallets } from '../lib/db';
+import { GROUPS, categoriseTxn, cycleDay, editTxn, removeTxn, unsorted } from '../lib/money';
 import type { Txn } from '../lib/types';
-import { addMonths, byId, fmtDay, fmtMonth, fmtRM, monthKey, senToInput, toSen } from '../lib/util';
+import { addMonths, byId, cycleMonth, cycleRange, fmtDay, fmtMonth, fmtRM, senToInput, toSen } from '../lib/util';
 import { ConfirmButton, Field, Icon, Sheet, run, useToday } from '../ui';
 import QuickSpendForm from './QuickSpend';
 
@@ -47,14 +47,16 @@ export default function Transactions() {
   const imap = byId(items);
   const [wallet, setWallet] = useState('');
   const [group, setGroup] = useState('');
-  const [month, setMonth] = useState(monthKey(today));
+  const startDay = cycleDay(useSettings());
+  const [picked, setMonth] = useState<string | null>(null);
+  const month = picked ?? cycleMonth(today, startDay);
   const [editing, setEditing] = useState<Txn | null>(null);
   const toSort = unsorted(txns ?? []).sort((a, b) => b.txn_date.localeCompare(a.txn_date) || b.created_ms - a.created_ms);
   const cats = (items ?? []).filter((i) => i.status === 'active').sort((a, b) => a.group_id.localeCompare(b.group_id) || a.sort_order - b.sort_order);
-  const months = [0, -1, -2, -3].map((n) => addMonths(monthKey(today), n));
+  const months = [0, -1, -2, -3].map((n) => addMonths(cycleMonth(today, startDay), n));
 
   const list = (txns ?? [])
-    .filter((t) => monthKey(t.txn_date) === month)
+    .filter((t) => cycleMonth(t.txn_date, startDay) === month)
     .filter((t) => !wallet || t.wallet_id === wallet)
     .filter((t) => !group || (group === 'none' ? !t.group_id : t.group_id === group))
     .sort((a, b) => b.txn_date.localeCompare(a.txn_date) || b.created_ms - a.created_ms);
@@ -92,6 +94,7 @@ export default function Transactions() {
             {months.map((m) => (
               <option key={m} value={m}>
                 {fmtMonth(m)}
+                {startDay > 1 && ` (${fmtDay(cycleRange(m, startDay).start)} – ${fmtDay(cycleRange(m, startDay).end)})`}
               </option>
             ))}
           </select>

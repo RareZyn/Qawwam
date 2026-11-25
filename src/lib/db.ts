@@ -111,6 +111,8 @@ export function useDocData<T>(name: string, id: string): T | null | undefined {
 export const LOG_WINDOW_DAYS = 120;
 
 export const useHabits = () => useCol<Habit>('habits');
+/** Every log of one habit (the dashboard filters to the last year). */
+export const useHabitLogs = (habitId: string) => useCol<HabitLog>('habit_logs', `habit_logs:${habitId}`, where('habit_id', '==', habitId));
 export const useLogs = () => {
   const from = addDays(todayStr(), -LOG_WINDOW_DAYS);
   return useCol<HabitLog>('habit_logs', `habit_logs>=${from}`, where('log_date', '>=', from));
@@ -124,7 +126,8 @@ export const useSnapshots = () => useCol<WalletSnapshot>('wallet_snapshots');
 export const useItems = () => useCol<MoneyItem>('money_items');
 export const usePayments = () => useCol<ItemPayment>('item_payments');
 export const useTxns = () => {
-  const from = `${addMonths(monthKey(todayStr()), -3)}-01`;
+  // One extra month so the oldest pay cycle shown (which starts in the month before) is complete.
+  const from = `${addMonths(monthKey(todayStr()), -4)}-01`;
   return useCol<Txn>('transactions', `transactions>=${from}`, where('txn_date', '>=', from));
 };
 export const useTodoGroups = () => useCol<TodoGroup>('todo_groups');

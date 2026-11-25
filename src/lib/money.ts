@@ -1,7 +1,10 @@
 import { deleteDoc, increment, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, udoc } from './db';
-import type { GroupCode, ItemPayment, MoneyItem, Txn, TxnSource, Wallet, WalletType } from './types';
-import { monthKey, newId } from './util';
+import type { GroupCode, ItemPayment, MoneyItem, Settings, Txn, TxnSource, Wallet, WalletType } from './types';
+import { cycleMonth, cycleRange, newId } from './util';
+
+/** The payday the money month starts on (see Settings). */
+export const cycleDay = (s: Settings | null | undefined) => s?.money_cycle_day ?? 1;
 
 /**
  * The three fixed groups. Ticking an item for a month means:
@@ -88,7 +91,7 @@ export const paymentId = (itemId: string, month: string) => `${itemId}_${month}`
  * Tick or untick an item for a month. A tick records a transaction against the right wallet when there is one;
  * an untick reverses exactly what the tick did.
  */
-export function setPaid(item: MoneyItem, month: string, paid: boolean, existing: ItemPayment | undefined, cashWalletId: string | null, today: string) {
+export function setPaid(item: MoneyItem, month: string, paid: boolean, existing: ItemPayment | undefined, cashWalletId: string | null, today: string, startDay = 1) {
   const b = writeBatch(db);
   const pid = paymentId(item.id, month);
   const ref = udoc('item_payments', pid);
@@ -118,7 +121,7 @@ export function setPaid(item: MoneyItem, month: string, paid: boolean, existing:
         source: 'item_payment',
         note: null,
         // A tick for another month is dated inside that month so history stays readable.
-        txn_date: monthKey(today) === month ? today : `${month}-01`,
+        txn_date: cycleMonth(today, startDay) === month ? today : cycleRange(month, startDay).start,
       });
     }
   } else {
@@ -211,12 +214,12 @@ export function removeItem(item: MoneyItem) {
 
 // ---------------------------------------------------------------- reading the numbers
 
-/** Amount spent per Spent & Cash item in a month (positive sen). */
-export function spentByItem(txns: Txn[], month: string): Record<string, number> {
+/** Amount spent per Spent & Cash item in a money month (positive sen). */
+export function spentByItem(txns: Txn[], month: string, startDay = 1): Record<string, number> {
   const out: Record<string, number> = {};
   for (const t of txns) {
     if (t.group_id !== 'spent_cash' || !t.item_id || t.source === 'item_payment') continue;
-    if (monthKey(t.txn_date) !== month) continue;
+    if (cycleMonth(t.txn_date, startDay) !== month) continue;
     out[t.item_id] = (out[t.item_id] ?? 0) - t.amount;
   }
   return out;

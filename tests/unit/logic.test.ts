@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cleanDays, cleanStreak, goodStreak, logId, milestone, periods } from '../../src/lib/habits';
 import { describe as describeRec, isDue, nextFire } from '../../src/lib/recurrence';
 import type { Habit } from '../../src/lib/types';
-import { addDays, addMonths, diffDays, fmtRM, toSen, weekKey, weekStart } from '../../src/lib/util';
+import { addDays, addMonths, cycleMonth, cycleRange, diffDays, fmtRM, toSen, weekKey, weekStart } from '../../src/lib/util';
 
 const habit = (over: Partial<Habit> = {}): Habit => ({
   id: 'h',
@@ -94,5 +94,19 @@ describe('habit maths', () => {
   });
   it('maps a date to its day, week and month totals', () => {
     expect(periods('2026-11-14').map((p) => p.id)).toEqual(['day_2026-11-14', 'week_2026-W46', 'month_2026-11']);
+  });
+});
+
+describe('money month (pay cycle)', () => {
+  it('is the calendar month when it starts on the 1st', () => {
+    expect(cycleMonth('2026-11-25')).toBe('2026-11');
+    expect(cycleRange('2026-02', 1)).toEqual({ start: '2026-02-01', end: '2026-02-28' });
+  });
+  it('rolls over on payday', () => {
+    expect(cycleMonth('2026-11-24', 25)).toBe('2026-11');
+    expect(cycleMonth('2026-11-25', 25)).toBe('2026-12');
+    expect(cycleMonth('2026-12-31', 25)).toBe('2027-01');
+    expect(cycleRange('2026-12', 25)).toEqual({ start: '2026-11-25', end: '2026-12-24' });
+    expect(cycleRange('2027-03', 25)).toEqual({ start: '2027-02-25', end: '2027-03-24' });
   });
 });

@@ -2,9 +2,9 @@ import { getDocs, limit, query, where } from 'firebase/firestore';
 import { type FormEvent, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ucol, useItems, usePayments, useSettings, useSnapshots, useTxns, useWallets } from '../lib/db';
-import { GROUPS, type ItemInput, adjustWallet, createWallet, deleteWallet, groupOf, isPaid, paymentId, removeItem, saveItem, setPaid, spentByItem, unsorted, updateWallet } from '../lib/money';
+import { GROUPS, type ItemInput, adjustWallet, createWallet, cycleDay, deleteWallet, groupOf, isPaid, paymentId, removeItem, saveItem, setPaid, spentByItem, unsorted, updateWallet } from '../lib/money';
 import type { GroupCode, MoneyItem, Wallet, WalletType } from '../lib/types';
-import { addMonths, byId, fmtMonth, fmtMonthShort, fmtRM, monthKey, ordinal, senToInput, sum, toSen } from '../lib/util';
+import { addMonths, byId, cycleMonth, cycleRange, fmtDay, fmtMonth, fmtMonthShort, fmtRM, ordinal, senToInput, sum, toSen } from '../lib/util';
 import { useQuickSpend } from '../quick';
 import { Bar, Check, Chips, ConfirmButton, Field, Icon, Seg, Sheet, run, toast, useToday } from '../ui';
 
@@ -153,14 +153,26 @@ function useSheets() {
   return { openWallet: (wallet?: Wallet) => setWalletSheet({ wallet }), openItem: (group: GroupCode, item?: MoneyItem) => setItemSheet({ group, item }), sheets };
 }
 
-function MonthSwitch({ month, onChange }: { month: string; onChange: (m: string) => void }) {
+/** "25 Oct – 24 Nov" when the money month does not start on the 1st, otherwise nothing. */
+export function CycleRange({ month, startDay }: { month: string; startDay: number }) {
+  if (startDay <= 1) return null;
+  const r = cycleRange(month, startDay);
+  return (
+    <span className="tiny dim">
+      {fmtDay(r.start)} – {fmtDay(r.end)}
+    </span>
+  );
+}
+
+function MonthSwitch({ month, startDay, onChange }: { month: string; startDay: number; onChange: (m: string) => void }) {
   return (
     <div className="row" style={{ gap: 6 }}>
       <button type="button" className="btn sm icon" aria-label="Previous month" onClick={() => onChange(addMonths(month, -1))}>
         <Icon name="back" size={16} />
       </button>
-      <span className="small" style={{ minWidth: 112, textAlign: 'center' }}>
+      <span className="col tight small" style={{ minWidth: 112, textAlign: 'center' }}>
         {fmtMonth(month)}
+        <CycleRange month={month} startDay={startDay} />
       </span>
       <button type="button" className="btn sm icon" aria-label="Next month" onClick={() => onChange(addMonths(month, 1))}>
         <Icon name="next" size={16} />
@@ -211,7 +223,7 @@ function ChecklistBody({ group, month, onEdit }: { group: 'savings_investment' |
           const w = i.wallet_id ? wmap[i.wallet_id] : undefined;
           return (
             <div key={i.id} className="line">
-              <Check checked={on} label={`${i.name} paid for ${fmtMonth(month)}`} onChange={(v) => run(setPaid(i, month, v, payments[paymentId(i.id, month)], settings?.cash_wallet_id ?? null, today))} />
+              <Check checked={on} label={`${i.name} paid for ${fmtMonth(month)}`} onChange={(v) => run(setPaid(i, month, v, payments[paymentId(i.id, month)], settings?.cash_wallet_id ?? null, today, cycleDay(settings)))} />
               <button type="button" className="grow col tight link" style={{ color: 'var(--text)', textAlign: 'left', fontSize: 15 }} onClick={() => onEdit(group, i)}>
                 <span>{i.name}</span>
                 <span className="tiny dim">
@@ -232,7 +244,11 @@ export function Checklist() {
   const today = useToday();
   const [params, setParams] = useSearchParams();
   const group = (params.get('g') === 'subs' ? 'subscription_fixed' : 'savings_investment') as 'savings_investment' | 'subscription_fixed';
-  const [month, setMonth] = useState(monthKey(today));
+  const settings = useSettings();
+  const startDay = cycleDay(settings);
+  // Follow the current cycle until a month is picked, so it is right once settings load.
+  const [picked, setMonth] = useState<string | null>(null);
+  const month = picked ?? cycleMonth(today, startDay);
   const { openItem, sheets } = useSheets();
   return (
     <div className="page narrow">
@@ -243,7 +259,7 @@ export function Checklist() {
           </Link>
           <h1>Monthly checklist</h1>
         </div>
-        <MonthSwitch month={month} onChange={setMonth} />
+        <MonthSwitch month={month} startDay={startDay} onChange={setMonth} />
       </header>
       <Seg
         options={[['savings_investment', 'Savings & Invest.'], ['subscription_fixed', 'Subscription & Fixed']]}
@@ -265,21 +281,22 @@ export function Checklist() {
 
 function SpentBody({ onEdit }: { onEdit: (g: GroupCode, i?: MoneyItem) => void }) {
   const today = useToday();
-  const month = monthKey(today);
   const items = useItems();
   const payList = usePayments();
   const txns = useTxns();
   const wallets = useWallets();
   const settings = useSettings();
   const quick = useQuickSpend();
+  const startDay = cycleDay(settings);
+  const month = cycleMonth(today, startDay);
   const payments = byId(payList);
   const cash = wallets?.find((w) => w.id === settings?.cash_wallet_id) ?? wallets?.find((w) => w.is_cash_pool);
   const list = (items ?? []).filter((i) => i.group_id === 'spent_cash' && i.status === 'active').sort((a, b) => a.sort_order - b.sort_order);
-  const spent = spentByItem(txns ?? [], month);
+  const spent = spentByItem(txns ?? [], month, startDay);
   const budget = sum(list, (i) => i.amount);
   const totalSpent = sum(list, (i) => spent[i.id] ?? 0);
   const over = list.filter((i) => (spent[i.id] ?? 0) > i.amount);
-  const loose = unsorted(txns ?? []).filter((t) => t.wallet_id === cash?.id && monthKey(t.txn_date) === month);
+  const loose = unsorted(txns ?? []).filter((t) => t.wallet_id === cash?.id && cycleMonth(t.txn_date, startDay) === month);
   const left = budget - totalSpent;
 
   return (
@@ -316,7 +333,7 @@ function SpentBody({ onEdit }: { onEdit: (g: GroupCode, i?: MoneyItem) => void }
         const allocated = isPaid(payments, i.id, month);
         return (
           <div key={i.id} className="item" style={{ alignItems: 'flex-start', paddingTop: 12, paddingBottom: 12 }}>
-            <Check checked={allocated} label={`Move ${i.name} budget into cash for ${fmtMonth(month)}`} onChange={(v) => run(setPaid(i, month, v, payments[paymentId(i.id, month)], cash?.id ?? null, today))} />
+            <Check checked={allocated} label={`Move ${i.name} budget into cash for ${fmtMonth(month)}`} onChange={(v) => run(setPaid(i, month, v, payments[paymentId(i.id, month)], cash?.id ?? null, today, startDay))} />
             <div className="grow col" style={{ gap: 6 }}>
               <div className="row between base">
                 <button type="button" className="link" style={{ color: 'var(--text)', fontSize: 15, textAlign: 'left' }} onClick={() => onEdit('spent_cash', i)}>
@@ -358,6 +375,8 @@ function SpentBody({ onEdit }: { onEdit: (g: GroupCode, i?: MoneyItem) => void }
 
 export function Spent() {
   const today = useToday();
+  const startDay = cycleDay(useSettings());
+  const month = cycleMonth(today, startDay);
   const { openItem, sheets } = useSheets();
   return (
     <div className="page narrow">
@@ -368,7 +387,10 @@ export function Spent() {
           </Link>
           <div className="col tight">
             <h1>Spent &amp; Cash</h1>
-            <span className="tiny dim">{fmtMonth(monthKey(today))}</span>
+            <span className="tiny dim">
+              {fmtMonth(month)}
+              {startDay > 1 && ` · ${fmtDay(cycleRange(month, startDay).start)} – ${fmtDay(cycleRange(month, startDay).end)}`}
+            </span>
           </div>
         </div>
       </header>
@@ -445,7 +467,6 @@ function SavingsTrend() {
 
 export default function Money() {
   const today = useToday();
-  const month = monthKey(today);
   const wallets = useWallets();
   const items = useItems();
   const payList = usePayments();
@@ -453,12 +474,14 @@ export default function Money() {
   const settings = useSettings();
   const quick = useQuickSpend();
   const { openWallet, openItem, sheets } = useSheets();
+  const startDay = cycleDay(settings);
+  const month = cycleMonth(today, startDay);
   const payments = byId(payList);
   const activeWallets = (wallets ?? []).filter((w) => w.status === 'active').sort((a, b) => a.sort_order - b.sort_order);
   const total = sum(activeWallets, (w) => w.balance);
   const toSort = unsorted(txns ?? []).length;
   const planned = sum((items ?? []).filter((i) => i.status === 'active'), (i) => i.amount);
-  const spent = spentByItem(txns ?? [], month);
+  const spent = spentByItem(txns ?? [], month, startDay);
 
   const groupCard = (code: GroupCode) => {
     const list = (items ?? []).filter((i) => i.group_id === code && i.status === 'active');
@@ -508,7 +531,10 @@ export default function Money() {
       </section>
 
       <section className="col only-mobile">
-        <h2>{fmtMonth(month)}</h2>
+        <div className="row between base">
+          <h2>{fmtMonth(month)}</h2>
+          <CycleRange month={month} startDay={startDay} />
+        </div>
         {GROUPS.map((g) => {
           const c = groupCard(g.code);
           const to = g.code === 'spent_cash' ? '/money/spent' : g.code === 'subscription_fixed' ? '/money/checklist?g=subs' : '/money/checklist';

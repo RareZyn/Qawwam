@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { exportAll, rebuildSummaries, removeSampleData, saveReminder, updateSettings } from '../lib/actions';
 import { useReminders, useSettings, useWallets } from '../lib/db';
 import { auth } from '../lib/firebase';
-import { fmtRM, senToInput, toSen } from '../lib/util';
+import { fmtRM, ordinal, senToInput, toSen } from '../lib/util';
 import { ConfirmButton, Field, Toggle, run, toast } from '../ui';
 import { PermissionNote } from './Reminders';
 import { resetDevicePattern } from './Vault';
@@ -170,6 +170,27 @@ export default function Settings({ user }: { user: User }) {
               )}
             </span>
           </form>
+          <label className="line row between small">
+            <span className="col tight">
+              Money month starts on
+              <span className="tiny dim">Your payday. Checklist ticks and cash budgets reset on this day.</span>
+            </span>
+            <select
+              className="input sm"
+              style={{ width: 'auto' }}
+              value={settings?.money_cycle_day ?? 1}
+              onChange={(e) => {
+                const d = Number(e.target.value);
+                run(updateSettings({ money_cycle_day: d }), d === 1 ? 'Money month follows the calendar' : `Money month now starts on the ${ordinal(d)}`);
+              }}
+            >
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  {d === 1 ? '1st (calendar month)' : ordinal(d)}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="line row between small">
             Cash pool wallet
             <select className="input sm" style={{ width: 'auto' }} value={settings?.cash_wallet_id ?? ''} onChange={(e) => run(updateSettings({ cash_wallet_id: e.target.value }))}>
